@@ -1,37 +1,25 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware # <--- NEW IMPORT
+from fastapi.middleware.cors import CORSMiddleware
 from app.db.engine import create_db_and_tables
 from app.services.firebase_auth import initialize_firebase
 from app.models import User, Book, BookCopy, Transaction, Fine, GateLog
 from app.api.endpoints import router as api_router
+from app.core.config import settings
 
 app = FastAPI(title="Smart Library API")
 
-# --- CORS SETTINGS (Allow React to talk to Python) ---
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://smart-library-system.vercel.app",
-    "https://smart-library-system-orpin.vercel.app",
-    "https://localhost",
-    "http://localhost",
-    "capacitor://localhost",
-]
-
-# The Nuclear CORS Setup for Firebase Token Auth
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # Open the floodgates, Vercel is welcome here
-    allow_credentials=False,  # <-- THIS IS THE MAGIC KEY. We don't use cookies!
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
-# -----------------------------------------------------
 
 @app.on_event("startup")
 def on_startup():
-    create_db_and_tables()
     initialize_firebase()
+    create_db_and_tables()
 
 @app.get("/")
 def root():

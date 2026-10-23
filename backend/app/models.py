@@ -6,7 +6,7 @@ import uuid
 class SearchLog(SQLModel, table=True):
     __tablename__ = "search_logs"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    user_id: Optional[str] = Field(default=None, foreign_key="user.id")
+    user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id")
     search_query: str
     target_unity_location_id: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
