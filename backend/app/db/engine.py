@@ -7,7 +7,7 @@ from app.core.config import settings
 connection_string = settings.DATABASE_URL
 
 # echo=True prints SQL queries to the terminal (Great for debugging)
-engine = create_engine(connection_string, echo=True, pool_pre_ping=True, pool_recycle=300)
+engine = create_engine(connection_string, echo=False, pool_pre_ping=True, pool_recycle=300)
 
 def get_session():
     with Session(engine) as session:
