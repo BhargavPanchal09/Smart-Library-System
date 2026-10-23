@@ -1,3 +1,5 @@
+For current deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md). The original overview below contains historical setup details.
+
 # 📚 Smart Library System (SmartOS)
 
 ![Next.js](https://img.shields.io/badge/Next.js-14+-black?style=for-the-badge&logo=next.js)
