@@ -8,6 +8,26 @@ import random
 from sqlalchemy import text, func
 from pydantic import BaseModel
 from app.services.firebase_auth import verify_token
+from app.core.config import settings
+
+def require_staff(token_data: dict = Depends(verify_token), session: Session = Depends(get_session)):
+    user = session.exec(select(User).where(User.firebase_uid == token_data["uid"])).first()
+    if not user or not user.is_active or user.role not in {"admin", "staff"}:
+        raise HTTPException(status_code=403, detail="Staff access required")
+    return user
+
+
+def require_admin(user: User = Depends(require_staff)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    return user
+
+
+def require_demo(user: User = Depends(require_admin)):
+    if not settings.ENABLE_DEMO_ENDPOINTS:
+        raise HTTPException(status_code=403, detail="Demo data operations are disabled")
+    return user
+
 
 router = APIRouter()
 
@@ -33,7 +53,7 @@ def get_book_by_id(book_id: str, session: Session = Depends(get_session)):
     return book
 
 # --- 2. ISSUE BOOK (Logic) ---
-@router.post("/transactions/issue")
+@router.post("/transactions/issue", dependencies=[Depends(require_staff)])
 def issue_book(
     user_email: str, 
     rfid_tag: str, 
@@ -75,7 +95,7 @@ class SearchLogCreate(BaseModel):
     unity_location_id: str
 
 
-@router.post("/transactions/return")
+@router.post("/transactions/return", dependencies=[Depends(require_staff)])
 def return_book(rfid_tag: str, session: Session = Depends(get_session)):
     copy = session.exec(select(BookCopy).where(BookCopy.rfid_tag == rfid_tag)).first()
     if not copy:
@@ -122,7 +142,7 @@ def return_book(rfid_tag: str, session: Session = Depends(get_session)):
         "fine_math": fine_math
     }
 
-@router.post("/analytics/log-search")
+@router.post("/analytics/log-search", dependencies=[Depends(verify_token)])
 def log_search(payload: SearchLogCreate, session: Session = Depends(get_session)):
     log_entry = SearchLog(
         search_query=payload.search_query,
@@ -133,7 +153,7 @@ def log_search(payload: SearchLogCreate, session: Session = Depends(get_session)
     
     return {"status": "success", "message": "Search intent logged successfully"}
 
-@router.post("/books/add")
+@router.post("/books/add", dependencies=[Depends(require_staff)])
 def add_book(book_data: Book, session: Session = Depends(get_session)):
     # 1. Check if ISBN already exists
     existing_book = session.exec(select(Book).where(Book.isbn == book_data.isbn)).first()
@@ -234,7 +254,7 @@ def get_student_dashboard_data(
         return {"full_name": user.full_name, "issued": 0, "fines": 0, "due_text": "Error", "activity": [], "fine_details": [], "recommendations": []}
     
     
-@router.get("/admin/master-ledger")
+@router.get("/admin/master-ledger", dependencies=[Depends(require_admin)])
 def get_master_ledger(session: Session = Depends(get_session)):
     # 1. Fetch all required data
     transactions = session.exec(select(Transaction)).all()
@@ -291,7 +311,7 @@ def get_master_ledger(session: Session = Depends(get_session)):
     ledger.sort(key=lambda x: x["timestamp"], reverse=True)
     return ledger[:150]
 
-@router.post("/admin/students/{user_id}/clear-fines")
+@router.post("/admin/students/{user_id}/clear-fines", dependencies=[Depends(require_admin)])
 def clear_student_fines(user_id: str, session: Session = Depends(get_session)):
     # 1. Find all overdue transactions for this specific student
     overdue_txs = session.exec(select(Transaction).where(
@@ -315,7 +335,7 @@ def clear_student_fines(user_id: str, session: Session = Depends(get_session)):
     session.commit()
     return {"message": f"Successfully cleared fines and processed {len(overdue_txs)} book returns."}
 
-@router.post("/admin/fix-students")
+@router.post("/admin/fix-students", dependencies=[Depends(require_demo)])
 def fix_students_data(session: Session = Depends(get_session)):
     # 1. Safely unlink search logs so we don't lose our Heatmap analytics!
     session.exec(text("UPDATE search_logs SET user_id = NULL;"))
@@ -383,7 +403,7 @@ def fix_students_data(session: Session = Depends(get_session)):
     return {"message": "Cleaned students! 50 diverse students and fresh transactions added. Analytics preserved!"}
 
 
-@router.get("/admin/students")
+@router.get("/admin/students", dependencies=[Depends(require_admin)])
 def get_admin_students(session: Session = Depends(get_session)):
     # Fetch all students and calculate their live stats
     users = session.exec(select(User).where(User.role == "student")).all()
@@ -405,7 +425,7 @@ def get_admin_students(session: Session = Depends(get_session)):
     
     return sorted(result, key=lambda x: x['fines'], reverse=True) # Sort by highest fines first
 
-@router.get("/admin/analytics")
+@router.get("/admin/analytics", dependencies=[Depends(require_admin)])
 def get_admin_analytics(session: Session = Depends(get_session)):
     # 1. High-Level Stats
     total_students = session.exec(select(func.count(User.id)).where(User.role == "student")).one()
@@ -454,7 +474,7 @@ def get_admin_analytics(session: Session = Depends(get_session)):
         "trending_books": trending_books
     }
 
-@router.post("/admin/reset-my-student")
+@router.post("/admin/reset-my-student", dependencies=[Depends(require_demo)])
 def reset_my_student(session: Session = Depends(get_session)):
     # 1. Find the specific test user
     email = "student@college.edu"
@@ -532,7 +552,7 @@ def reset_my_student(session: Session = Depends(get_session)):
 
     return {"message": "Success! student@college.edu now has 1 Active, 1 Overdue, and 2 Completed books."}
 
-@router.post("/transactions/seed-realistic-nuv")
+@router.post("/transactions/seed-realistic-nuv", dependencies=[Depends(require_demo)])
 def seed_realistic_nuv_data(session: Session = Depends(get_session)):
     # 1. CLEANUP: Wipe old dummy data so we don't get Duplicate ISBN errors
     # We use text() to safely execute raw SQL in SQLModel/SQLAlchemy 2.0
@@ -611,9 +631,9 @@ def seed_realistic_nuv_data(session: Session = Depends(get_session)):
         
     session.commit()
     
-    return {"message": "Database wiped and seeded with 50 correctly formatted books!", "count": len(books_to_add)}
+    return {"message": "Demo database seeded successfully.", "count": len(db_books)}
 
-@router.post("/admin/demo-presentation-seed")
+@router.post("/admin/demo-presentation-seed", dependencies=[Depends(require_demo)])
 def demo_presentation_seed(session: Session = Depends(get_session)):
     # 1. WIPE OLD TRANSACTIONS, FINES, AND SEARCH LOGS
     session.exec(text("DELETE FROM fine;"))
@@ -696,12 +716,11 @@ def demo_presentation_seed(session: Session = Depends(get_session)):
 class LocationUpdate(BaseModel):
     unity_location_id: str
 
-@router.put("/books/{book_id}/update-location")
+@router.put("/books/{book_id}/update-location", dependencies=[Depends(require_staff)])
 def update_book_location(
     book_id: str, 
     payload: LocationUpdate, 
     session: Session = Depends(get_session),
-    # token_data: dict = Depends(verify_token) # Uncomment if you want to secure this route later
 ):
     book = session.get(Book, book_id)
     if not book:
