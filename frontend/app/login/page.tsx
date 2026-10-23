@@ -23,8 +23,6 @@ export default function LoginPage() {
 
   const handleStandardLogin = async () => {
   setIsAuthenticating(true);
-  // Temporary debug log
-  console.log("Attempting login for:", email, password);
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
       const token = await result.user.getIdToken();
