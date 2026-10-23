@@ -1,12 +1,14 @@
-# backend/app/core/config.py
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     DATABASE_URL: str
-    SECRET_KEY: str
-    FIREBASE_CREDENTIALS: str # Added this
+    FIREBASE_CREDENTIALS: str = "service-account.json"
+    FIREBASE_JSON: str | None = None
+    CORS_ORIGINS: str = "http://localhost:3000"
+    ENABLE_DEMO_ENDPOINTS: bool = False
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 settings = Settings()
