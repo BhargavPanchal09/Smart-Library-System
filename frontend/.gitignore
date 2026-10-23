@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+!.env.example
+
+# Local build verification output
+.n/
+.next-build-test/
+
+# Generated service-worker support files
+/public/workbox-*.js

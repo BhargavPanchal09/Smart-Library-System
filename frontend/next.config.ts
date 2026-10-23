@@ -8,10 +8,14 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === "development", // Don't cache aggressively in dev mode
   register: true,
   skipWaiting: true,
+  publicExcludes: ["!unity-build/**/*"],
+  runtimeCaching: [
+    { urlPattern: /^https?:\/\/.*\/api\/v1\//, handler: "NetworkOnly", method: "GET" },
+  ],
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /* Default Next.js output directory and build settings. */
   reactStrictMode: false,
   allowedDevOrigins: ['172.20.10.4'],
 };
